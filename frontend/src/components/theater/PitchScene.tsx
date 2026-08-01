@@ -5,7 +5,12 @@ import * as THREE from "three";
 import type { FlightPath, Pitch } from "../../types";
 import { colorForPitchType } from "./pitchColors";
 import { sampleToScene, samplesToPositions, toScene } from "./coords";
-import { getCameraSnapshot, setCameraSnapshot } from "./cameraStore";
+import {
+  getCameraSnapshot,
+  hasFramedCamera,
+  markCameraFramed,
+  setCameraSnapshot,
+} from "./cameraStore";
 
 interface PathLayer {
   pitch: Pitch;
@@ -239,6 +244,7 @@ function framePath(
     position: [camPos.x, camPos.y, camPos.z],
     target: [center.x, center.y, center.z],
   });
+  markCameraFramed();
 }
 
 function applySnapshot(
@@ -247,15 +253,16 @@ function applySnapshot(
 ): boolean {
   const snap = getCameraSnapshot();
   if (!snap) return false;
-  camera.position.set(...snap.position);
+  camera.position.set(snap.position[0], snap.position[1], snap.position[2]);
   if (controls) {
-    controls.target.set(...snap.target);
+    controls.target.set(snap.target[0], snap.target[1], snap.target[2]);
     controls.update();
   } else {
     camera.lookAt(
       new THREE.Vector3(snap.target[0], snap.target[1], snap.target[2])
     );
   }
+  markCameraFramed();
   return true;
 }
 
@@ -268,11 +275,14 @@ function persistCamera(camera: THREE.Camera, controls: ControlsLike | null) {
       ? [t.x, t.y, t.z]
       : (prev?.target ?? [0, 2.8, -22]),
   });
+  markCameraFramed();
 }
 
 /**
- * Restore last user viewpoint (module store), or auto-frame once.
- * Never re-frame on pitch change after a snapshot exists.
+ * Owns the camera for the Canvas lifetime.
+ * - Auto-frames only once (first path ever, or restores snapshot on remount).
+ * - Does NOT re-run when the active pitch / sequence chip changes.
+ * - Continuously saves orbit/zoom into the module store.
  */
 function CameraRig({
   path,
@@ -282,40 +292,65 @@ function CameraRig({
   controlsRef: React.MutableRefObject<ControlsLike | null>;
 }) {
   const { camera } = useThree();
+  // Latest path for the one-time auto-frame only (not an effect dependency).
+  const pathRef = useRef(path);
+  pathRef.current = path;
+  const booted = useRef(false);
 
-  // Restore snapshot (or initial frame) after controls attach. Re-run when
-  // path changes only to re-apply the *same* snapshot if the tree remounted.
   useEffect(() => {
-    let alive = true;
-    const apply = () => {
-      if (!alive) return;
+    let cancelled = false;
+
+    const boot = () => {
+      if (cancelled || booted.current) return;
       const controls = controlsRef.current;
+      // Wait until OrbitControls has attached.
+      if (!controls) return;
+
+      // Prefer whatever the user already had (or a prior auto-frame).
       if (getCameraSnapshot()) {
         applySnapshot(camera, controls);
+        booted.current = true;
         return;
       }
-      if (path?.samples?.length) {
-        framePath(path, camera, controls);
+
+      // First visit only: frame the current path once.
+      const p = pathRef.current;
+      if (p?.samples?.length && !hasFramedCamera()) {
+        framePath(p, camera, controls);
+        booted.current = true;
       }
     };
-    // Two frames: OrbitControls ref is often null on the first.
-    const id1 = requestAnimationFrame(() => {
-      apply();
-      requestAnimationFrame(apply);
-    });
-    return () => {
-      alive = false;
-      cancelAnimationFrame(id1);
-      persistCamera(camera, controlsRef.current);
-    };
-  }, [camera, controlsRef, path]);
 
-  // Persist every frame while user is interacting (damping makes "end" late).
-  useFrame(() => {
+    boot();
+    // Poll briefly until controls ref is ready (usually 1-2 frames).
+    const interval = window.setInterval(boot, 32);
+    const stop = window.setTimeout(() => window.clearInterval(interval), 1500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.clearTimeout(stop);
+      persistCamera(camera, controlsRef.current);
+      // Note: do not clear booted / snapshot - remount restores from store.
+    };
+    // Intentionally omit `path` - sequence chip changes must not touch camera.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camera, controlsRef]);
+
+  // If the first path arrives after controls were ready but path was empty, frame once.
+  useEffect(() => {
+    if (booted.current || hasFramedCamera()) return;
+    if (!path?.samples?.length) return;
     const controls = controlsRef.current;
     if (!controls) return;
-    // Only write while controls report a recent change via damping motion;
-    // always cheap: three floats.
+    framePath(path, camera, controls);
+    booted.current = true;
+  }, [path, camera, controlsRef]);
+
+  useFrame(() => {
+    if (!booted.current && !hasFramedCamera()) return;
+    const controls = controlsRef.current;
+    if (!controls) return;
     persistCamera(camera, controls);
   });
 
