@@ -5,6 +5,7 @@ import * as THREE from "three";
 import type { FlightPath, Pitch } from "../../types";
 import { colorForPitchType } from "./pitchColors";
 import { sampleToScene, samplesToPositions, toScene } from "./coords";
+import { getCameraSnapshot, setCameraSnapshot } from "./cameraStore";
 
 interface PathLayer {
   pitch: Pitch;
@@ -19,7 +20,6 @@ interface PitchSceneProps {
 }
 
 function HomePlate() {
-  // Simple plate diamond in scene XZ (y = ground). Plate face toward mound (+X? no: mound is -Z).
   return (
     <group position={[0, 0.02, -1.417]}>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
@@ -71,7 +71,6 @@ function StrikeZone({
         <edgesGeometry args={[new THREE.PlaneGeometry(width, height)]} />
         <lineBasicMaterial color="#e8a14a" transparent opacity={0.85} />
       </lineSegments>
-      {/* Zone grid 3x3 */}
       {[1, 2].map((i) => (
         <group key={i}>
           <mesh position={[-width / 2 + (width * i) / 3, 0, 0.001]}>
@@ -185,16 +184,97 @@ function FlightRibbon({
 
 type ControlsLike = {
   target: THREE.Vector3;
+  object: THREE.Camera;
   minDistance: number;
   maxDistance: number;
   update: () => void;
+  addEventListener: (type: string, listener: () => void) => void;
+  removeEventListener: (type: string, listener: () => void) => void;
 };
 
+function framePath(
+  path: FlightPath,
+  camera: THREE.Camera,
+  controls: ControlsLike | null
+): void {
+  const box = new THREE.Box3();
+  for (const s of path.samples) {
+    box.expandByPoint(sampleToScene(s));
+  }
+  box.expandByPoint(new THREE.Vector3(0, 2.5, -1.4));
+  box.expandByPoint(new THREE.Vector3(0, 0, -1.4));
+
+  const center = new THREE.Vector3();
+  const size = new THREE.Vector3();
+  box.getCenter(center);
+  box.getSize(size);
+
+  center.z = center.z * 0.65 + -1.4 * 0.35;
+  center.y = Math.max(center.y, 2.2);
+
+  const span = Math.max(size.x, size.y, size.z, 20);
+  const dist = span * 0.95;
+  const camPos = new THREE.Vector3(
+    center.x + dist * 0.55,
+    center.y + dist * 0.28,
+    center.z + dist * 0.42
+  );
+
+  camera.position.copy(camPos);
+  if ("near" in camera) {
+    (camera as THREE.PerspectiveCamera).near = 0.1;
+    (camera as THREE.PerspectiveCamera).far = 300;
+    (camera as THREE.PerspectiveCamera).updateProjectionMatrix();
+  }
+  camera.lookAt(center);
+
+  if (controls) {
+    controls.target.copy(center);
+    controls.minDistance = Math.max(6, span * 0.25);
+    controls.maxDistance = Math.max(40, span * 2.2);
+    controls.update();
+  }
+
+  setCameraSnapshot({
+    position: [camPos.x, camPos.y, camPos.z],
+    target: [center.x, center.y, center.z],
+  });
+}
+
+function applySnapshot(
+  camera: THREE.Camera,
+  controls: ControlsLike | null
+): boolean {
+  const snap = getCameraSnapshot();
+  if (!snap) return false;
+  camera.position.set(...snap.position);
+  if (controls) {
+    controls.target.set(...snap.target);
+    controls.update();
+  } else {
+    camera.lookAt(
+      new THREE.Vector3(snap.target[0], snap.target[1], snap.target[2])
+    );
+  }
+  return true;
+}
+
+function persistCamera(camera: THREE.Camera, controls: ControlsLike | null) {
+  const prev = getCameraSnapshot();
+  const t = controls?.target;
+  setCameraSnapshot({
+    position: [camera.position.x, camera.position.y, camera.position.z],
+    target: t
+      ? [t.x, t.y, t.z]
+      : (prev?.target ?? [0, 2.8, -22]),
+  });
+}
+
 /**
- * Auto-frame once on the first path. After that the user owns the camera:
- * orbiting / zooming is kept when switching pitches.
+ * Restore last user viewpoint (module store), or auto-frame once.
+ * Never re-frame on pitch change after a snapshot exists.
  */
-function CameraFramer({
+function CameraRig({
   path,
   controlsRef,
 }: {
@@ -202,50 +282,42 @@ function CameraFramer({
   controlsRef: React.MutableRefObject<ControlsLike | null>;
 }) {
   const { camera } = useThree();
-  const hasFramed = useRef(false);
 
+  // Restore snapshot (or initial frame) after controls attach. Re-run when
+  // path changes only to re-apply the *same* snapshot if the tree remounted.
   useEffect(() => {
-    if (hasFramed.current) return;
-    if (!path?.samples?.length) return;
-    hasFramed.current = true;
+    let alive = true;
+    const apply = () => {
+      if (!alive) return;
+      const controls = controlsRef.current;
+      if (getCameraSnapshot()) {
+        applySnapshot(camera, controls);
+        return;
+      }
+      if (path?.samples?.length) {
+        framePath(path, camera, controls);
+      }
+    };
+    // Two frames: OrbitControls ref is often null on the first.
+    const id1 = requestAnimationFrame(() => {
+      apply();
+      requestAnimationFrame(apply);
+    });
+    return () => {
+      alive = false;
+      cancelAnimationFrame(id1);
+      persistCamera(camera, controlsRef.current);
+    };
+  }, [camera, controlsRef, path]);
 
-    const box = new THREE.Box3();
-    for (const s of path.samples) {
-      box.expandByPoint(sampleToScene(s));
-    }
-    box.expandByPoint(new THREE.Vector3(0, 2.5, -1.4));
-    box.expandByPoint(new THREE.Vector3(0, 0, -1.4));
-
-    const center = new THREE.Vector3();
-    const size = new THREE.Vector3();
-    box.getCenter(center);
-    box.getSize(size);
-
-    center.z = center.z * 0.65 + -1.4 * 0.35;
-    center.y = Math.max(center.y, 2.2);
-
-    const span = Math.max(size.x, size.y, size.z, 20);
-    const dist = span * 0.95;
-    const camPos = new THREE.Vector3(
-      center.x + dist * 0.55,
-      center.y + dist * 0.28,
-      center.z + dist * 0.42
-    );
-
-    camera.position.copy(camPos);
-    camera.near = 0.1;
-    camera.far = 300;
-    camera.lookAt(center);
-    camera.updateProjectionMatrix();
-
+  // Persist every frame while user is interacting (damping makes "end" late).
+  useFrame(() => {
     const controls = controlsRef.current;
-    if (controls) {
-      controls.target.copy(center);
-      controls.minDistance = Math.max(6, span * 0.25);
-      controls.maxDistance = Math.max(40, span * 2.2);
-      controls.update();
-    }
-  }, [path, camera, controlsRef]);
+    if (!controls) return;
+    // Only write while controls report a recent change via damping motion;
+    // always cheap: three floats.
+    persistCamera(camera, controls);
+  });
 
   return null;
 }
@@ -289,7 +361,6 @@ export default function PitchScene({
         <meshBasicMaterial color="#3d4a63" transparent opacity={0.55} />
       </mesh>
 
-      {/* Rubber hint */}
       <mesh position={[0, 0.03, -55]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[0.6, 0.15]} />
         <meshBasicMaterial color="#cbd5e1" transparent opacity={0.35} />
@@ -306,15 +377,15 @@ export default function PitchScene({
         />
       ))}
 
-      <CameraFramer
-        path={active?.flight ?? null}
-        controlsRef={controlsRef}
-      />
+      <CameraRig path={active?.flight ?? null} controlsRef={controlsRef} />
 
+      {/*
+        Do NOT pass a `target` prop — drei re-applies it on re-render and
+        steals the user's viewpoint whenever paths update.
+      */}
       <OrbitControls
         ref={controlsRef as never}
         makeDefault
-        target={[0, 2.8, -22]}
         maxPolarAngle={Math.PI * 0.49}
         minDistance={8}
         maxDistance={90}

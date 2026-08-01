@@ -174,6 +174,7 @@ export default function PitchTheater({
         {paths.length > 0 && (
           <Canvas
             className="theater-canvas"
+            // Stable identity: never remount the GL context for pitch swaps.
             shadows
             dpr={[1, 1.75]}
             camera={{
