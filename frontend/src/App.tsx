@@ -182,8 +182,14 @@ const App: React.FC = () => {
 
           <div className="pf-center">
             <section className="pf-stage-shell" aria-label="3D pitch stage">
+              {/* Keep one PitchTheater instance mounted so the WebGL context
+                  and camera snapshot survive pitch switches. */}
               {activeRowid != null ? (
-                <PitchTheater variant="page" rowid={activeRowid} />
+                <PitchTheater
+                  key="stage"
+                  variant="page"
+                  rowid={activeRowid}
+                />
               ) : (
                 <div className="pf-stage-empty">
                   {loading ? (
