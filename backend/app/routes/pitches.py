@@ -7,13 +7,14 @@ from app.extensions import db
 from app.models import Pitch
 from app.physics.trajectory import flight_from_pitch_fields
 from app.routes import load_query_params, paginate
-from app.schemas import PitchQuerySchema, PitchSchema
+from app.schemas import AtBatQuerySchema, PitchQuerySchema, PitchSchema
 
 pitches_bp = Blueprint("pitches", __name__)
 
 pitches_schema = PitchSchema(many=True)
 pitch_schema = PitchSchema()
 pitch_query_schema = PitchQuerySchema()
+at_bat_query_schema = AtBatQuerySchema()
 
 # Columns needed to reconstruct a flight path (may be TEXT in SQLite).
 _FLIGHT_FIELD_NAMES = (
@@ -120,6 +121,139 @@ def get_pitch_flight(rowid: int):
     if pitch is None:
         abort(404, description="Pitch not found")
     return jsonify(_pitch_flight_payload(pitch)), 200
+
+
+@pitches_bp.route("/at-bats", methods=["GET"])
+def list_at_bats():
+    """Paginated at-bat summaries for a pitcher and/or batter.
+
+    Query params:
+        pitcher   - player_id (throws)
+        batter    - player_id (sees)
+        page / per_page
+
+    At least one of pitcher or batter is required. Both = matchup filter.
+    Each row is one plate appearance with pitch count, sequence types,
+    result, and the first pitch rowid (for opening the theater).
+    """
+    params = load_query_params(at_bat_query_schema, request.args)
+    if "pitcher" not in params and "batter" not in params:
+        abort(400, description="pitcher or batter is required")
+
+    query = Pitch.query.filter(
+        Pitch.game_pk.isnot(None),
+        Pitch.game_pk != "",
+        Pitch.at_bat_number.isnot(None),
+        Pitch.at_bat_number != "",
+    )
+    if "pitcher" in params:
+        query = query.filter(Pitch.pitcher == params["pitcher"])
+    if "batter" in params:
+        query = query.filter(Pitch.batter == params["batter"])
+
+    # Distinct PA keys ordered by most recent game first.
+    keys_q = (
+        query.with_entities(
+            Pitch.game_pk,
+            Pitch.at_bat_number,
+            Pitch.game_date,
+        )
+        .distinct()
+        .order_by(Pitch.game_date.desc(), Pitch.game_pk.desc(), Pitch.at_bat_number.desc())
+    )
+    keys = keys_q.all()
+    total = len(keys)
+    page = params["page"]
+    per_page = params["per_page"]
+    total_pages = max(1, (total + per_page - 1) // per_page) if total else 0
+    start = (page - 1) * per_page
+    page_keys = keys[start : start + per_page]
+
+    data = []
+    for game_pk, at_bat_number, _game_date in page_keys:
+        pa_pitches = (
+            Pitch.query.filter(
+                Pitch.game_pk == game_pk,
+                Pitch.at_bat_number == at_bat_number,
+            )
+            .order_by(cast(Pitch.pitch_number, Float).asc(), Pitch.rowid.asc())
+            .all()
+        )
+        if "pitcher" in params:
+            pa_pitches = [p for p in pa_pitches if p.pitcher == params["pitcher"]]
+        if "batter" in params:
+            pa_pitches = [p for p in pa_pitches if p.batter == params["batter"]]
+        if not pa_pitches:
+            continue
+
+        lead = pa_pitches[0]
+        last = pa_pitches[-1]
+        result = None
+        for p in reversed(pa_pitches):
+            if p.events:
+                result = p.events
+                break
+        if result is None and last.description:
+            result = last.description
+
+        types: list[str] = []
+        for p in pa_pitches:
+            code = p.pitch_type or "?"
+            types.append(code)
+
+        data.append(
+            {
+                "game_pk": int(float(game_pk)) if str(game_pk).replace(".", "", 1).isdigit() else game_pk,
+                "at_bat_number": int(float(at_bat_number))
+                if str(at_bat_number).replace(".", "", 1).isdigit()
+                else at_bat_number,
+                "game_date": lead.game_date,
+                "pitcher": lead.pitcher,
+                "batter": lead.batter,
+                "pitcher_name": lead.player_name,
+                "home_team": lead.home_team,
+                "away_team": lead.away_team,
+                "inning": int(float(lead.inning))
+                if lead.inning not in (None, "")
+                else None,
+                "inning_topbot": lead.inning_topbot,
+                "pitch_count": len(pa_pitches),
+                "pitch_types": types,
+                "result": result,
+                "first_pitch_rowid": lead.rowid,
+                "pitches": [
+                    {
+                        "rowid": p.rowid,
+                        "pitch_number": int(float(p.pitch_number))
+                        if p.pitch_number not in (None, "")
+                        else idx + 1,
+                        "pitch_type": p.pitch_type,
+                        "pitch_name": p.pitch_name,
+                        "release_speed": float(p.release_speed)
+                        if p.release_speed not in (None, "")
+                        else None,
+                        "description": p.description,
+                        "events": p.events,
+                    }
+                    for idx, p in enumerate(pa_pitches)
+                ],
+            }
+        )
+
+    return (
+        jsonify(
+            {
+                "data": data,
+                "pagination": {
+                    "page": page,
+                    "per_page": per_page,
+                    "total": total,
+                    "total_pages": total_pages,
+                },
+            }
+        ),
+        200,
+    )
 
 
 @pitches_bp.route("/games/<int:game_pk>/at-bats/<int:at_bat_number>", methods=["GET"])

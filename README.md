@@ -82,10 +82,16 @@ cd frontend && npm run test:run
 
 ## Roadmap
 
-1. Pitcher left rail + batter right rail (search, at-bats, pitch chips)
-2. Season backfill into warehouse (Postgres)
-3. Drift Index v1 - rolling vs early-season baseline
-4. Public deploy (API + CDN frontend)
+1. [x] Pitcher left rail + batter right rail (search, at-bats, pitch chips, matchup)
+2. [ ] Season backfill into warehouse (Postgres)
+3. [ ] Drift Index v1 - rolling vs early-season baseline
+4. [ ] Public deploy (API + CDN frontend)
+
+### At-bat list API
+
+`GET /api/at-bats?pitcher=<id>&batter=<id>&page=1&per_page=25`
+
+Requires pitcher and/or batter. Returns plate-appearance summaries with pitch chips and `first_pitch_rowid` for the theater.
 
 ## Data note
 

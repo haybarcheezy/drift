@@ -154,3 +154,18 @@ class PitchQuerySchema(Schema):
     end_date = fields.Date()
     page = fields.Integer(load_default=1, validate=validate.Range(min=1))
     per_page = fields.Integer(load_default=50, validate=validate.Range(min=1, max=500))
+
+
+class AtBatQuerySchema(Schema):
+    """Validates /api/at-bats list query parameters.
+
+    At least one of pitcher or batter is required (enforced in the route).
+    """
+
+    class Meta:
+        unknown = EXCLUDE
+
+    pitcher = fields.Integer()
+    batter = fields.Integer()
+    page = fields.Integer(load_default=1, validate=validate.Range(min=1))
+    per_page = fields.Integer(load_default=25, validate=validate.Range(min=1, max=100))

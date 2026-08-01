@@ -1,7 +1,9 @@
 import axios from "axios";
 import {
   ArsenalResponse,
+  AtBatListFilters,
   AtBatResponse,
+  AtBatSummary,
   Paginated,
   Pitch,
   PitchFilterOptions,
@@ -87,6 +89,15 @@ export class ApiService {
     const { data } = await api.get<AtBatResponse>(
       `/games/${gamePk}/at-bats/${atBatNumber}`
     );
+    return data;
+  }
+
+  static async listAtBats(
+    filters: AtBatListFilters
+  ): Promise<Paginated<AtBatSummary>> {
+    const { data } = await api.get<Paginated<AtBatSummary>>("/at-bats", {
+      params: cleanParams(filters),
+    });
     return data;
   }
 

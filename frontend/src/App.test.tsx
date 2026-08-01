@@ -12,10 +12,10 @@ vi.mock("./services/api", () => ({
     getPitches: vi.fn(),
     getPitchFlight: vi.fn(),
     getAtBat: vi.fn(),
+    listAtBats: vi.fn(),
   },
 }));
 
-// R3F canvas is heavy in jsdom; stub the theater for App chrome tests.
 vi.mock("./components/theater/PitchTheater", () => ({
   default: ({ rowid }: { rowid: number }) => (
     <div data-testid="pitch-theater">Theater for pitch {rowid}</div>
@@ -80,6 +80,14 @@ beforeEach(() => {
     data: [samplePitch],
     pagination: { page: 1, per_page: 32, total: 1, total_pages: 1 },
   });
+  mocked.getPlayers.mockResolvedValue({
+    data: [],
+    pagination: { page: 1, per_page: 12, total: 0, total_pages: 0 },
+  });
+  mocked.listAtBats.mockResolvedValue({
+    data: [],
+    pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 },
+  });
   mocked.getPitchFlight.mockResolvedValue({
     pitch: samplePitch,
     flight: {
@@ -96,15 +104,16 @@ beforeEach(() => {
 });
 
 describe("App", () => {
-  it("boots into the theater stage immediately with live pitch data", async () => {
+  it("boots theater and side rails", async () => {
     render(<App />);
     expect(
       screen.getByRole("heading", { name: /^drift$/i })
     ).toBeInTheDocument();
-
     expect(await screen.findByTestId("pitch-theater")).toHaveTextContent(
       "Theater for pitch 42"
     );
+    expect(screen.getByLabelText(/pitcher browser/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/batter browser/i)).toBeInTheDocument();
     expect(await screen.findByText(/Wheeler, Zack/i)).toBeInTheDocument();
   });
 

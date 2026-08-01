@@ -94,6 +94,43 @@ export interface AtBatResponse {
   pitches: PitchFlightResponse[];
 }
 
+/** Compact pitch chip inside an at-bat summary. */
+export interface AtBatPitchChip {
+  rowid: number;
+  pitch_number: number;
+  pitch_type: string | null;
+  pitch_name: string | null;
+  release_speed: number | null;
+  description: string | null;
+  events: string | null;
+}
+
+/** One plate appearance for the side rails. */
+export interface AtBatSummary {
+  game_pk: number;
+  at_bat_number: number;
+  game_date: string;
+  pitcher: number;
+  batter: number;
+  pitcher_name: string | null;
+  home_team: string | null;
+  away_team: string | null;
+  inning: number | null;
+  inning_topbot: string | null;
+  pitch_count: number;
+  pitch_types: string[];
+  result: string | null;
+  first_pitch_rowid: number;
+  pitches: AtBatPitchChip[];
+}
+
+export interface AtBatListFilters {
+  pitcher?: number;
+  batter?: number;
+  page?: number;
+  per_page?: number;
+}
+
 export interface Pagination {
   page: number;
   per_page: number;
