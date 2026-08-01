@@ -1,0 +1,16 @@
+meta {
+  name: Get Player By ID
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/players/{{playerId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+

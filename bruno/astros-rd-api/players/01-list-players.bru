@@ -1,0 +1,22 @@
+meta {
+  name: List Players
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/players
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  per_page: 25
+  team: {{team}}
+}
+
+headers {
+  Accept: application/json
+}
+

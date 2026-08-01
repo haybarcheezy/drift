@@ -1,0 +1,16 @@
+meta {
+  name: Player Arsenal
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/players/{{playerId}}/arsenal
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+

@@ -1,0 +1,40 @@
+{
+  "name": "Dev Environment",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "frontend",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+  "postCreateCommand": "cd /workspace/frontend && bun install && cd /workspace/backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && cp /workspace/.devcontainer/pytest-backend.sh /usr/local/bin/pytest-backend && chmod +x /usr/local/bin/pytest-backend",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "oven.bun-vscode",
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "typescript.tsdk": "/workspace/frontend/node_modules/typescript/lib",
+        "python.defaultInterpreterPath": "/workspace/backend/.venv/bin/python",
+        "python.terminal.activateEnvironment": true,
+        "python.analysis.extraPaths": ["/workspace/backend"],
+        "python.analysis.autoSearchPaths": true,
+        "python.analysis.diagnosticMode": "workspace",
+        "python.envFile": "${workspaceFolder}/.env",
+        "python.languageServer": "Pylance",
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.black-formatter",
+          "editor.formatOnSave": true,
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+          }
+        }
+      }
+    }
+  },
+  "forwardPorts": [3000, 5001]
+}

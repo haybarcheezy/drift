@@ -1,0 +1,29 @@
+meta {
+  name: List Pitches
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/pitches
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  per_page: 50
+  pitcher: {{pitcherId}}
+  batter: {{batterId}}
+  pitch_type: {{pitchType}}
+  team: {{team}}
+  min_velocity: {{minVelocity}}
+  max_velocity: {{maxVelocity}}
+  start_date: {{startDate}}
+  end_date: {{endDate}}
+}
+
+headers {
+  Accept: application/json
+}
+
