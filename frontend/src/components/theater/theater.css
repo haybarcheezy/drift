@@ -278,6 +278,23 @@
   animation: spin 0.85s linear infinite;
 }
 
+.theater-loading-orb--sm {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-width: 2px;
+}
+
+/* Non-blocking swap indicator; does not unmount the WebGL canvas. */
+.theater-loading-soft {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

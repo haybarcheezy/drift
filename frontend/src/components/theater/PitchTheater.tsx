@@ -33,7 +33,10 @@ export default function PitchTheater({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    // Soft load: keep previous path + camera mounted while fetching.
+    // Only show the full-screen loader on the first pitch (empty stage).
+    const isFirstLoad = items.length === 0;
+    if (isFirstLoad) setLoading(true);
     setError("");
     setProgress(0);
     setPlaying(true);
@@ -78,6 +81,8 @@ export default function PitchTheater({
     return () => {
       cancelled = true;
     };
+    // items.length intentionally omitted: only used to decide first-load UI
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowid, onPitchMeta]);
 
   useEffect(() => {
@@ -165,24 +170,8 @@ export default function PitchTheater({
       aria-label="Pitch theater"
     >
       <div className="theater-canvas-wrap">
-        {loading && (
-          <div className="theater-loading">
-            <div className="theater-loading-orb" />
-            <span>Reconstructing flight path</span>
-          </div>
-        )}
-        {error && (
-          <div className="theater-error">
-            <div>{error}</div>
-            {!isPage && (
-              <button type="button" className="theater-btn" onClick={onClose}>
-                Close
-              </button>
-            )}
-          </div>
-        )}
-
-        {!loading && !error && paths.length > 0 && (
+        {/* Keep Canvas mounted once we have any path so orbit/zoom survive pitch changes. */}
+        {paths.length > 0 && (
           <Canvas
             className="theater-canvas"
             shadows
@@ -214,7 +203,29 @@ export default function PitchTheater({
           </Canvas>
         )}
 
-        {!loading && !error && pitch && (
+        {loading && paths.length === 0 && (
+          <div className="theater-loading">
+            <div className="theater-loading-orb" />
+            <span>Reconstructing flight path</span>
+          </div>
+        )}
+        {loading && paths.length > 0 && (
+          <div className="theater-loading-soft" aria-hidden>
+            <div className="theater-loading-orb theater-loading-orb--sm" />
+          </div>
+        )}
+        {error && paths.length === 0 && (
+          <div className="theater-error">
+            <div>{error}</div>
+            {!isPage && (
+              <button type="button" className="theater-btn" onClick={onClose}>
+                Close
+              </button>
+            )}
+          </div>
+        )}
+
+        {pitch && (
           <div className="theater-hud">
             <div className="theater-top-left theater-glass">
               <p className="theater-kicker">Statcast kinematic path</p>

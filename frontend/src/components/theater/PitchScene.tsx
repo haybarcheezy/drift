@@ -190,7 +190,10 @@ type ControlsLike = {
   update: () => void;
 };
 
-/** Frame the active path so the full flight sits centered in view (not off to one side). */
+/**
+ * Auto-frame once on the first path. After that the user owns the camera:
+ * orbiting / zooming is kept when switching pitches.
+ */
 function CameraFramer({
   path,
   controlsRef,
@@ -199,19 +202,17 @@ function CameraFramer({
   controlsRef: React.MutableRefObject<ControlsLike | null>;
 }) {
   const { camera } = useThree();
-  const framedKey = useRef<string>("");
+  const hasFramed = useRef(false);
 
   useEffect(() => {
+    if (hasFramed.current) return;
     if (!path?.samples?.length) return;
-    const key = `${path.samples.length}-${path.t_plate}-${path.samples[0].x}`;
-    if (framedKey.current === key) return;
-    framedKey.current = key;
+    hasFramed.current = true;
 
     const box = new THREE.Box3();
     for (const s of path.samples) {
       box.expandByPoint(sampleToScene(s));
     }
-    // Keep plate / zone in frame
     box.expandByPoint(new THREE.Vector3(0, 2.5, -1.4));
     box.expandByPoint(new THREE.Vector3(0, 0, -1.4));
 
@@ -220,12 +221,10 @@ function CameraFramer({
     box.getCenter(center);
     box.getSize(size);
 
-    // Bias center slightly toward plate so release doesn't yank framing
     center.z = center.z * 0.65 + -1.4 * 0.35;
     center.y = Math.max(center.y, 2.2);
 
     const span = Math.max(size.x, size.y, size.z, 20);
-    // 3/4 view from first-base side, elevated
     const dist = span * 0.95;
     const camPos = new THREE.Vector3(
       center.x + dist * 0.55,
