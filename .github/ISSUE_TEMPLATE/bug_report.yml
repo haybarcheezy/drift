@@ -1,0 +1,60 @@
+name: Bug report
+description: Something renders wrong, an endpoint returns bad data, or ingest fails
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Pitch-specific problems are much easier to chase down with the
+        identifiers below filled in.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the theater for game 745123
+        2. Select at-bat 4
+        3. Switch to the previous pitch
+    validations:
+      required: true
+
+  - type: input
+    id: identifiers
+    attributes:
+      label: Game / pitch identifiers
+      description: game_pk, at-bat number, play_id, or pitch row id, if the problem is about a specific pitch.
+      placeholder: game_pk=745123, at_bat=4, play_id=abc123
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Pitch theater / 3D rendering
+        - Tunnel compare
+        - Heat strip
+        - API response
+        - Ingest
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser and OS for UI issues, Python/Node version for backend issues.
+      placeholder: Chrome 128 / Windows 11
+    validations:
+      required: false
